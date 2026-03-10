@@ -1,0 +1,23 @@
+{
+  "slots": [
+    [
+      {"provider": "path"},
+      {"provider": "git"},
+      {"provider": "limits"},
+      {"provider": "vibes"}
+    ],
+    {
+      "command": "bun x ccusage statusline --visual-burn-rate text --refresh-interval 60",
+      "ttl": 300,
+      "enabled": false
+    }
+  ],
+
+  "_examples_remove_before_use": {
+    "git_branch_only": {"provider": "git", "enabled": ["branch", "dirty"]},
+    "external_cwd_sensitive": {
+      "command": "node ~/.claude/hooks/gsd-statusline.js --no-ctx --no-model --no-repo",
+      "cwd_sensitive": true
+    }
+  }
+}
