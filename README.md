@@ -39,7 +39,7 @@ curl -sSL https://raw.githubusercontent.com/j2h4u/oh-my-statusline/main/install.
 
 Installs `omcc-statusline.py` to `~/.claude/` and configures `settings.json` automatically. Restart Claude Code after.
 
-To preview: `python3 ~/.claude/omcc-statusline.py --demo`
+To preview: `~/.claude/omcc-statusline.py --demo`
 
 ## What You See
 

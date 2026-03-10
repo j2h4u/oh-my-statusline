@@ -23,4 +23,4 @@ $PY "$DEST" --install
 
 echo ""
 echo "Done. Restart Claude Code to see the statusline."
-echo "Run '$PY $DEST --demo' to preview."
+echo "Run '$DEST --demo' to preview."
