@@ -34,12 +34,10 @@ Once the 5 work days have elapsed and you're in weekend territory, pace metrics 
 ## Installation
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/j2h4u/oh-my-statusline/main/install.sh | bash
+python3 ~/.claude/plugins/marketplaces/oh-my-claude-plugins/meta/utils/statusline/omcc-statusline.py --install
 ```
 
-Installs `omcc-statusline.py` to `~/.claude/` and configures `settings.json` automatically. Restart Claude Code after.
-
-To preview: `~/.claude/omcc-statusline.py --demo`
+Test: `python3 omcc-statusline.py --demo`
 
 ## What You See
 
@@ -55,24 +53,6 @@ Pace labels: **based** (way under) → **hyped** → **chill** (on track) → **
 Copy `config.example.json` to `~/.config/omcc-statusline/config.json` and edit. Without config — defaults work out of the box.
 
 External commands that aren't installed show a dim placeholder (e.g. `[ccusage: not found]`).
-
-### Slot fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `provider` | string | Built-in provider: `path`, `git`, `limits`, `vibes` |
-| `command` | string | Shell command — receives Claude's JSON via stdin, stdout shown in statusline |
-| `enabled` | bool \| list | `false` — skip slot entirely. List of section names — show only those sections (providers only). Default: `true` (show all) |
-| `ttl` | number | Cache TTL in seconds for external commands. Default: 60 |
-| `cwd_sensitive` | bool | Cache external command output per working directory instead of globally. Use for commands that read project-local state. Default: `false` |
-
-Provider sections for `enabled` filter:
-
-| Provider | Sections |
-|----------|---------|
-| `git` | `branch`, `dirty`, `staged`, `untracked`, `ahead`, `behind`, `ci`, `prs`, `notif` |
-| `limits` | `5h`, `7d`, `ctx` |
-| `vibes` | `pace` |
 
 ## Theme Editor
 

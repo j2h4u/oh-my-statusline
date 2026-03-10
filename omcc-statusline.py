@@ -421,7 +421,7 @@ INDICATOR_CONFIG = {
 _VALID_THEME_TOKENS = frozenset(e.key for e in ELEMENTS)
 _VALID_SETTINGS_KEYS = frozenset(s.key for s in SETTINGS_DEFS)
 _VALID_TOP_KEYS = frozenset({"slots", "settings", "theme"})
-_VALID_SLOT_KEYS = frozenset({"provider", "command", "ttl", "enabled", "cwd_sensitive"})
+_VALID_SLOT_KEYS = frozenset({"provider", "command", "ttl", "enabled", "show"})
 _VALID_ATTRS = frozenset(name for name, _, _ in ATTRS_AVAILABLE)
 
 
@@ -549,10 +549,10 @@ def _validate_config(config: dict) -> list[str]:
                         errors.append(f"{prefix}.ttl: must be a number")
                     enabled = slot.get("enabled")
                     if enabled is not None and not isinstance(enabled, bool):
-                        if isinstance(enabled, list):
-                            _validate_slot_show(enabled, slot, has_provider, prefix, errors)
-                        else:
-                            errors.append(f"{prefix}.enabled: must be a boolean or array")
+                        errors.append(f"{prefix}.enabled: must be a boolean")
+                    show = slot.get("show")
+                    if show is not None:
+                        _validate_slot_show(show, slot, has_provider, prefix, errors)
 
     return errors
 
@@ -1731,20 +1731,13 @@ def _check_command_available(command: str) -> str | None:
     return f"{T.warn}[{label}: not found]{T.R}"
 
 
-def run_external_slot(command: str, input_json: str, ttl: int, cwd_sensitive: bool = False) -> str:
+def run_external_slot(command: str, input_json: str, ttl: int) -> str:
     """Return external slot output from cache, trigger bg refresh if stale."""
     expanded = str(Path(command).expanduser())
     placeholder = _check_command_available(expanded)
     if placeholder is not None:
         return placeholder
-    if cwd_sensitive:
-        try:
-            _cdir = json.loads(input_json).get("workspace", {}).get("current_dir", "")
-        except Exception:
-            _cdir = ""
-        slot_key = f"slot:{hashlib.md5((expanded + _cdir).encode()).hexdigest()}"
-    else:
-        slot_key = f"slot:{hashlib.md5(expanded.encode()).hexdigest()}"
+    slot_key = f"slot:{hashlib.md5(expanded.encode()).hexdigest()}"
 
     if _try_claim_refresh(slot_key, ttl):
         _refresh_external_slot_subprocess(expanded, input_json, slot_key)
@@ -1796,15 +1789,12 @@ def execute_slots(slots: list, input_json: str, cwd: str) -> list[str]:
                 return ""
             func = PROVIDERS.get(provider)
             if func:
-                enabled = slot.get("enabled")
-                show = enabled if isinstance(enabled, list) else None
-                return func(input_json, cwd, show=show)
+                return func(input_json, cwd, show=slot.get("show"))
             return ""
         command = slot.get("command")
         if command:
             ttl = slot.get("ttl", SLOT_CACHE_TTL)
-            cwd_sensitive = slot.get("cwd_sensitive", False)
-            return run_external_slot(command, input_json, ttl, cwd_sensitive)
+            return run_external_slot(command, input_json, ttl)
         return ""
 
     grid: list[list[str]] = [[""] * len(ws) for ws in lines]
