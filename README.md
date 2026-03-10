@@ -34,10 +34,12 @@ Once the 5 work days have elapsed and you're in weekend territory, pace metrics 
 ## Installation
 
 ```bash
-python3 ~/.claude/plugins/marketplaces/oh-my-claude-plugins/meta/utils/statusline/omcc-statusline.py --install
+curl -sSL https://raw.githubusercontent.com/j2h4u/oh-my-statusline/main/install.sh | bash
 ```
 
-Test: `python3 omcc-statusline.py --demo`
+Installs `omcc-statusline.py` to `~/.claude/` and configures `settings.json` automatically. Restart Claude Code after.
+
+To preview: `python3 ~/.claude/omcc-statusline.py --demo`
 
 ## What You See
 
