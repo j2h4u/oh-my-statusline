@@ -421,7 +421,7 @@ INDICATOR_CONFIG = {
 _VALID_THEME_TOKENS = frozenset(e.key for e in ELEMENTS)
 _VALID_SETTINGS_KEYS = frozenset(s.key for s in SETTINGS_DEFS)
 _VALID_TOP_KEYS = frozenset({"slots", "settings", "theme"})
-_VALID_SLOT_KEYS = frozenset({"provider", "command", "ttl", "enabled", "show"})
+_VALID_SLOT_KEYS = frozenset({"provider", "command", "ttl", "enabled", "cwd_sensitive"})
 _VALID_ATTRS = frozenset(name for name, _, _ in ATTRS_AVAILABLE)
 
 
@@ -549,10 +549,10 @@ def _validate_config(config: dict) -> list[str]:
                         errors.append(f"{prefix}.ttl: must be a number")
                     enabled = slot.get("enabled")
                     if enabled is not None and not isinstance(enabled, bool):
-                        errors.append(f"{prefix}.enabled: must be a boolean")
-                    show = slot.get("show")
-                    if show is not None:
-                        _validate_slot_show(show, slot, has_provider, prefix, errors)
+                        if isinstance(enabled, list):
+                            _validate_slot_show(enabled, slot, has_provider, prefix, errors)
+                        else:
+                            errors.append(f"{prefix}.enabled: must be a boolean or array")
 
     return errors
 
@@ -600,10 +600,9 @@ def _load_theme_config() -> list[dict]:
 
     errors = _validate_config(config)
     if errors:
-        for e in errors:
-            print(f"config: {e}", file=sys.stderr)
-        print(f"Fix: {CONFIG_FILE}", file=sys.stderr)
-        sys.exit(1)
+        msg = "  ".join(f"config: {e}" for e in errors)
+        print(f"\033[31m{msg}  Fix: {CONFIG_FILE}\033[0m")
+        return list(DEFAULT_SLOTS)
 
     # apply theme token overrides
     theme = config.get("theme", {})
@@ -906,7 +905,8 @@ def _fmt_surplus(days: float) -> str:
         return f"{round(days):+d}d"
     for decimals in range(1, 9):
         if a >= 10 ** -decimals:
-            return f"{days:+.{decimals}f}d"
+            formatted = f"{days:+.{decimals}f}".rstrip("0").rstrip(".")
+            return f"{formatted}d"
     return f"{days:+.8f}d"
 
 
@@ -1731,13 +1731,20 @@ def _check_command_available(command: str) -> str | None:
     return f"{T.warn}[{label}: not found]{T.R}"
 
 
-def run_external_slot(command: str, input_json: str, ttl: int) -> str:
+def run_external_slot(command: str, input_json: str, ttl: int, cwd_sensitive: bool = False) -> str:
     """Return external slot output from cache, trigger bg refresh if stale."""
     expanded = str(Path(command).expanduser())
     placeholder = _check_command_available(expanded)
     if placeholder is not None:
         return placeholder
-    slot_key = f"slot:{hashlib.md5(expanded.encode()).hexdigest()}"
+    if cwd_sensitive:
+        try:
+            _cdir = json.loads(input_json).get("workspace", {}).get("current_dir", "")
+        except Exception:
+            _cdir = ""
+        slot_key = f"slot:{hashlib.md5((expanded + _cdir).encode()).hexdigest()}"
+    else:
+        slot_key = f"slot:{hashlib.md5(expanded.encode()).hexdigest()}"
 
     if _try_claim_refresh(slot_key, ttl):
         _refresh_external_slot_subprocess(expanded, input_json, slot_key)
@@ -1789,12 +1796,15 @@ def execute_slots(slots: list, input_json: str, cwd: str) -> list[str]:
                 return ""
             func = PROVIDERS.get(provider)
             if func:
-                return func(input_json, cwd, show=slot.get("show"))
+                enabled = slot.get("enabled")
+                show = enabled if isinstance(enabled, list) else None
+                return func(input_json, cwd, show=show)
             return ""
         command = slot.get("command")
         if command:
             ttl = slot.get("ttl", SLOT_CACHE_TTL)
-            return run_external_slot(command, input_json, ttl)
+            cwd_sensitive = slot.get("cwd_sensitive", False)
+            return run_external_slot(command, input_json, ttl, cwd_sensitive)
         return ""
 
     grid: list[list[str]] = [[""] * len(ws) for ws in lines]
@@ -1831,10 +1841,9 @@ def _load_validated_config() -> dict:
 
     errors = _validate_config(config)
     if errors:
-        for e in errors:
-            print(f"config: {e}", file=sys.stderr)
-        print(f"Fix: {CONFIG_FILE}", file=sys.stderr)
-        sys.exit(1)
+        msg = "  ".join(f"config: {e}" for e in errors)
+        print(f"\033[31m{msg}  Fix: {CONFIG_FILE}\033[0m")
+        return {}
 
     return config
 
@@ -2881,13 +2890,18 @@ def statusline_main() -> None:
         print(f"FATAL: Invalid JSON: {e}", file=sys.stderr)
         sys.exit(1)
 
-    current_dir = data.get("workspace", {}).get("current_dir")
-    if not current_dir:
-        print("FATAL: Failed to extract current_dir from JSON", file=sys.stderr)
-        sys.exit(1)
+    # From here on: valid JSON confirmed — we're inside Claude Code.
+    # Never crash silently; all errors go to stdout in red.
+    try:
+        current_dir = data.get("workspace", {}).get("current_dir")
+        if not current_dir:
+            print("\033[31merror: current_dir missing from stdin JSON\033[0m")
+            return
 
-    lines = execute_slots(slots, raw, current_dir)
-    print(render(lines))
+        lines = execute_slots(slots, raw, current_dir)
+        print(render(lines))
+    except Exception as e:
+        print(f"\033[31merror: {e}\033[0m")
 
 
 def _print_help() -> None:
