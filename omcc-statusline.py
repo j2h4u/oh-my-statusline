@@ -1271,14 +1271,15 @@ def _format_pr_dots(status: "PrStatus", include_pr: bool, include_notif: bool) -
 
     if include_notif and status.unread_count > 0:
         sep = " " if parts else ""
-        parts.append(f"{sep}{T.notif}\U0001f4ac{status.unread_count}{T.R}")
+        notif_text = osc8_link("https://github.com/notifications", f"\U0001f4ac{status.unread_count}")
+        parts.append(f"{sep}{T.notif}{notif_text}{T.R}")
 
     return "".join(parts)
 
 
 # --- CI status ---------------------------------------------------------------
 
-def _ci_from_pr_cache(branch: str) -> str | None:
+def _ci_from_pr_cache(branch: str, actions_url: str = "") -> str | None:
     """Try to get CI status from PR cache if branch matches an open PR."""
     raw = cache_get_raw("pr")
     cache = _safe_json_loads(raw) if raw else None
@@ -1290,10 +1291,10 @@ def _ci_from_pr_cache(branch: str) -> str | None:
             continue
         commits = pr.get("commits", {}).get("nodes", [])
         if not commits:
-            return _format_ci_label("pending")
+            return _format_ci_label("pending", actions_url)
         rollup = commits[0].get("commit", {}).get("statusCheckRollup")
         if not rollup:
-            return _format_ci_label("pending")
+            return _format_ci_label("pending", actions_url)
         state = rollup.get("state", "UNKNOWN")
         mapping = {
             "SUCCESS": "success",
@@ -1302,7 +1303,7 @@ def _ci_from_pr_cache(branch: str) -> str | None:
             "PENDING": "pending",
             "EXPECTED": "pending",
         }
-        return _format_ci_label(mapping.get(state, ""))
+        return _format_ci_label(mapping.get(state, ""), actions_url)
     return None
 
 
@@ -1352,10 +1353,6 @@ def get_ci_status(cwd: str, branch: str) -> str:
     if not branch:
         return ""
 
-    from_pr = _ci_from_pr_cache(branch)
-    if from_pr is not None:
-        return from_pr
-
     gh = check_gh_available()
     if gh != "ok":
         return ""
@@ -1368,6 +1365,11 @@ def get_ci_status(cwd: str, branch: str) -> str:
     if not parsed:
         return ""
     owner, repo = parsed
+    actions_url = f"https://github.com/{owner}/{repo}/actions"
+
+    from_pr = _ci_from_pr_cache(branch, actions_url)
+    if from_pr is not None:
+        return from_pr
 
     ci_key = f"ci:{owner}_{repo}_{branch}"
 
@@ -1377,18 +1379,22 @@ def get_ci_status(cwd: str, branch: str) -> str:
     cache = _cached_json(ci_key, API_CACHE_TTL, _refresh)
     if not cache:
         return ""
-    return _format_ci_label(cache.get("conclusion"))
+    actions_url = f"https://github.com/{owner}/{repo}/actions"
+    return _format_ci_label(cache.get("conclusion"), actions_url)
 
 
-def _format_ci_label(conclusion: str | None) -> str:
-    """Format CI conclusion as a colored 'CI' label."""
+def _format_ci_label(conclusion: str | None, actions_url: str = "") -> str:
+    """Format CI conclusion as a colored 'CI' label with optional OSC 8 link."""
+    ci_text = "CI"
+    if actions_url:
+        ci_text = osc8_link(actions_url, ci_text)
     labels = {
-        "success": f"{T.ok}CI{T.R}",
-        "failure": f"{T.err}CI{T.R}",
-        "pending": f"{T.wait}CI{T.R}",
-        "none":    f"{T.none}CI{T.R}",
+        "success": f"{T.ok}{ci_text}{T.R}",
+        "failure": f"{T.err}{ci_text}{T.R}",
+        "pending": f"{T.wait}{ci_text}{T.R}",
+        "none":    f"{T.none}{ci_text}{T.R}",
     }
-    return labels.get(conclusion, f"{T.none}CI{T.R}")
+    return labels.get(conclusion, f"{T.none}{ci_text}{T.R}")
 
 
 # --- limits provider ---------------------------------------------------------

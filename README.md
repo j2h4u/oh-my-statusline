@@ -54,6 +54,24 @@ Copy `config.example.json` to `~/.config/omcc-statusline/config.json` and edit. 
 
 External commands that aren't installed show a dim placeholder (e.g. `[ccusage: not found]`).
 
+### Slot fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `provider` | string | Built-in provider: `path`, `git`, `limits`, `vibes` |
+| `command` | string | Shell command — receives Claude's JSON via stdin, stdout shown in statusline |
+| `enabled` | bool \| list | `false` — skip slot entirely. List of section names — show only those sections (providers only). Default: `true` (show all) |
+| `ttl` | number | Cache TTL in seconds for external commands. Default: 60 |
+| `cwd_sensitive` | bool | Cache external command output per working directory instead of globally. Use for commands that read project-local state. Default: `false` |
+
+Provider sections for `enabled` filter:
+
+| Provider | Sections |
+|----------|---------|
+| `git` | `branch`, `dirty`, `staged`, `untracked`, `ahead`, `behind`, `ci`, `prs`, `notif` |
+| `limits` | `5h`, `7d`, `ctx` |
+| `vibes` | `pace` |
+
 ## Theme Editor
 
 ```bash
