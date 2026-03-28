@@ -149,24 +149,48 @@ def fg_rgb(r: int, g: int, b: int) -> str: return f"{CSI}38;2;{r};{g};{b}m"
 
 
 def _rainbow(text: str, hue_start: float = 0.0, hue_range: float = 1.0) -> str:
-    """Colorize text with a rainbow gradient using 24-bit RGB (lolcat style).
+    """Colorize text with a perceptually uniform rainbow using OKLCH.
 
-    hue_start: starting hue [0.0, 1.0)
+    All letters share the same perceived brightness regardless of hue.
+    Per-hue max chroma is computed via binary search against sRGB gamut
+    boundary (CSS Color Level 4 approach), so every hue gets maximum
+    vibrancy without clipping.
+
+    hue_start: starting hue [0.0, 1.0) — maps to full 360° wheel
     hue_range: fraction of color wheel to span across the text
     """
-    def _hsv_to_rgb(h: float) -> tuple[int, int, int]:
-        h = h % 1.0
-        i = int(h * 6)
-        f = h * 6 - i
-        p, q, t = 0.0, 1 - f, f
-        sector = i % 6
-        if sector == 0: r, g, b = 1.0, t, p
-        elif sector == 1: r, g, b = q, 1.0, p
-        elif sector == 2: r, g, b = p, 1.0, t
-        elif sector == 3: r, g, b = p, q, 1.0
-        elif sector == 4: r, g, b = t, p, 1.0
-        else: r, g, b = 1.0, p, q
-        return int(r * 255), int(g * 255), int(b * 255)
+    _L = 0.65
+    _CHROMA_FILL = 0.95  # fraction of max chroma per hue
+
+    def _oklch_to_lin(h: float, C: float) -> tuple[float, float, float]:
+        h_rad = h % 1.0 * 2 * math.pi
+        a = C * math.cos(h_rad)
+        b = C * math.sin(h_rad)
+        l_ = _L + 0.3963377774 * a + 0.2158037573 * b
+        m_ = _L - 0.1055613458 * a - 0.0638541728 * b
+        s_ = _L - 0.0894841775 * a - 1.2914855480 * b
+        l = l_ ** 3
+        m = m_ ** 3
+        s = s_ ** 3
+        return (+4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+
+    def _max_chroma(h: float) -> float:
+        lo, hi = 0.0, 0.4
+        for _ in range(20):
+            mid = (lo + hi) * 0.5
+            r, g, b = _oklch_to_lin(h, mid)
+            if -1e-6 <= r <= 1 + 1e-6 and -1e-6 <= g <= 1 + 1e-6 and -1e-6 <= b <= 1 + 1e-6:
+                lo = mid
+            else:
+                hi = mid
+        return lo
+
+    def _gamma(c: float) -> int:
+        c = max(0.0, min(1.0, c))
+        c = 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+        return int(c * 255 + 0.5)
 
     chars = list(text)
     n = max(len(chars) - 1, 1)
@@ -176,8 +200,9 @@ def _rainbow(text: str, hue_start: float = 0.0, hue_range: float = 1.0) -> str:
         if ch == " ":
             out.append(" ")
             continue
-        r, g, b = _hsv_to_rgb(h)
-        out.append(f"{fg_rgb(r, g, b)}{ch}")
+        C = _max_chroma(h) * _CHROMA_FILL
+        r, g, b = _oklch_to_lin(h, C)
+        out.append(f"{fg_rgb(_gamma(r), _gamma(g), _gamma(b))}{ch}")
     return "".join(out)
 
 RESET         = f"{CSI}0m"
