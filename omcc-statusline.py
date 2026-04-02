@@ -958,11 +958,15 @@ def _bar(pct: float, width: int = LIMITS_BAR_WIDTH, *, ramp: list, bar_bg: str |
 
 
 def _vbar(pct: float, *, ramp: list, bar_bg: str | None = None) -> str:
-    """Single-character vertical progress bar (bottom→up), colored."""
-    bg = _resolve_bar_bg(bar_bg)
+    """Single-character vertical progress bar (bottom→up), colored.
+
+    At high fill (idx 6-7) the background switches to bright white so the
+    thin remaining gap is clearly distinguishable from a full bar.
+    """
     clamped = max(0.0, min(100.0, pct))
     idx = round(clamped / 100 * 8)
     idx = max(1 if clamped > 0 else 0, min(8, idx))
+    bg = bg256(250) if idx in (6, 7) else _resolve_bar_bg(bar_bg)
     color = _multi_ramp(clamped, ramp)
     return f"{bg}{color}{_VBAR_EIGHTHS[idx]}{T.R}"
 
