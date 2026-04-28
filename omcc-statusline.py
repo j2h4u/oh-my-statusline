@@ -1739,6 +1739,8 @@ def _refresh_external_slot_subprocess(command: str, input_json: str,
     )
     if r.returncode == 0 and r.stdout.strip():
         _w(r.stdout.strip())
+    elif r.returncode == 0:
+        _w("{}")  # empty output = intentional, clear stale cache
     elif r.returncode != 0:
         _cooldown()
 """,
