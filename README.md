@@ -106,7 +106,7 @@ The 7-day usage limit is a **rolling window anchored to your first usage after t
 - **Activate your subscription on Monday morning.** If you work at a pace that burns through limits, they'll naturally run out around Friday evening — giving you weekends to rest without "wasting" paid time
 - If your window just expired and you want to keep the early reset time — **send a message as soon as possible** after reset, even a small one, to anchor the new window early
 - Avoid the trap of activating mid-week: you'll end up working weekends (because limits are still available) and sitting idle early in the week (waiting for reset)
-- The vibe pacing feature in this statusline assumes a **5-day work budget** within the 7-day window, specifically to help you pace through Mon–Fri and coast into the weekend
+- The vibe pacing feature in this statusline assumes a **5-day work budget** within the 7-day window. Pace metrics are shown all 7 days — on calendar weekends (Sat/Sun) the vibe label is rendered in rainbow as a visual signal that it's time to relax, but the delta and surplus numbers remain readable so you always know where you stand
 
 **Experiment: auto-anchoring with `/loop`**
 

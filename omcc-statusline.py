@@ -1471,15 +1471,14 @@ def _format_duration(minutes: int) -> str:
 def _7d_pace_label(utilization: float, resets_at: str) -> str:
     """Return pace label for 7d window assuming WORK_DAYS budget.
 
-    After WORK_DAYS have elapsed, pace metrics are meaningless — show weekend mode instead.
+    On calendar weekends (Sat/Sun) the label word is rendered in rainbow;
+    pace metrics are still shown so budget visibility is preserved all week.
     """
     reset_epoch = _parse_iso_utc(resets_at)
     if reset_epoch is None:
         return ""
     hours_elapsed = max(0.0, (time.time() - (reset_epoch - LIMITS_WINDOW_SECONDS)) / 3600)
     days_elapsed = hours_elapsed / 24
-    if days_elapsed >= WORK_DAYS:
-        return f"{_rainbow('no pace police', hue_start=_rainbow_next_phase())}{T.R}"
     expected = min(hours_elapsed / LIMITS_PACE_BUDGET_HOURS * 100.0, 100.0)
     if expected < LIMITS_PACE_MIN_EXPECTED:
         return ""
@@ -1490,6 +1489,9 @@ def _7d_pace_label(utilization: float, resets_at: str) -> str:
     if utilization > 0 and days_elapsed >= 0.5:
         daily_rate = utilization / days_elapsed
         surplus_str = f" {_fmt_surplus((100 / daily_rate) - WORK_DAYS)}"
+    if datetime.now().weekday() >= 5:
+        rainbow_label = f"{_rainbow(label, hue_start=_rainbow_next_phase())}{T.R}"
+        return f"{rainbow_label} {dc}{delta:+.0f}%{surplus_str}{T.R}"
     return f"{dc}{label} {delta:+.0f}%{surplus_str}{T.R}"
 
 
