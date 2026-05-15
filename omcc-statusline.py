@@ -1518,8 +1518,8 @@ def _format_limit_window(utilization: float, resets_at: str, label: str,
     time_str = ""
     if pct >= LIMITS_COUNTDOWN_THRESHOLD:
         reset_epoch = _parse_iso_utc(resets_at)
-        if reset_epoch is not None:
-            remaining_min = max(0, int((reset_epoch - time.time()) / 60))
+        if reset_epoch is not None and reset_epoch > time.time():
+            remaining_min = int((reset_epoch - time.time()) / 60)
             time_str = _format_duration(remaining_min)
 
     extras = " ".join(filter(None, [pct_str, time_str]))
@@ -1547,13 +1547,15 @@ def _refresh_limits_cache_subprocess() -> None:
         resp = urlopen(req, timeout=""" + str(LIMITS_HTTP_TIMEOUT) + r""")
     except HTTPError as e:
         if e.code == 429:
+            META_KEY = KEY + ":meta"
             retry = int(e.headers.get("Retry-After", 0))
             if retry > 0:
-                _cooldown(retry)
+                _cooldown(min(retry, BACKOFF_MAX))
             else:
-                # Exponential backoff via fail counter stored in cache data
+                # Exponential backoff. Fail counter lives in a sibling meta row
+                # so the primary cache `data` (full limits blob) is never overwritten.
                 row = con.execute(
-                    "SELECT data FROM cache WHERE key = ?", (KEY,)
+                    "SELECT data FROM cache WHERE key = ?", (META_KEY,)
                 ).fetchone()
                 fails = 0
                 if row and row[0]:
@@ -1563,50 +1565,53 @@ def _refresh_limits_cache_subprocess() -> None:
                         pass
                 fails += 1
                 backoff = min(BACKOFF_MAX, BACKOFF_MIN * (2 ** (fails - 1)))
-                # Preserve fail counter in cache data (without updating updated_at)
                 con.execute(
-                    "UPDATE cache SET data = ? WHERE key = ?",
-                    (json.dumps({"_429_fails": fails}), KEY))
+                    "INSERT OR REPLACE INTO cache (key, data, updated_at, cooldown_until) "
+                    "VALUES (?, ?, ?, 0)",
+                    (META_KEY, json.dumps({"_429_fails": fails}), time.time()))
                 _cooldown(backoff)
             sys.exit(0)
         raise
     _w(json.dumps(json.loads(resp.read())))
+    # Reset fail counter on success
+    con.execute("DELETE FROM cache WHERE key = ?", (KEY + ":meta",))
+    con.commit()
 """,
         cache_key="limits",
         extra_argv=(LIMITS_API_URL, token),
     )
 
 
-def _build_limits_bars(data: dict, sections: set[str]) -> list[str]:
-    """Build limit bars from cached data."""
+def _build_limits_bars(data: dict, sections: set[str], updated_at: float) -> list[str]:
+    """Build limit bars from cached data.
+
+    "stale" reflects cache age (refresh hasn't landed in 2× TTL), not the
+    rolling-window's resets_at — that legitimately points to the past after
+    periods without activity, which is a valid API state, not stale data.
+    """
     bars: list[str] = []
     five = data.get("five_hour", {})
     seven = data.get("seven_day", {})
-    now = time.time()
-    r5 = _parse_iso_utc(five.get("resets_at", ""))
-    r7 = _parse_iso_utc(seven.get("resets_at", ""))
-    stale5 = r5 is not None and now > r5
-    stale7 = r7 is not None and now > r7
     u5 = five.get("utilization", 0)
     u7 = seven.get("utilization", 0)
+    cache_stale = (time.time() - updated_at) > 2 * LIMITS_CACHE_TTL
 
-    # When 7d is maxed and not stale, only show 7d (5h is irrelevant)
-    if u7 >= 100 and not stale7:
+    def stale_label(prefix: str) -> str:
+        return f"{T.dir_parent}{prefix}{T.R} {T.warn}stale{T.R}"
+
+    # When 7d is maxed (and cache is fresh), only show 7d — 5h is irrelevant
+    if u7 >= 100 and not cache_stale:
         if "7d" in sections:
             bars.append(_format_limit_window_for_prefix(u7, seven.get("resets_at", ""), "7d"))
         return bars
 
     if "5h" in sections:
-        if stale5:
-            bars.append(f"{T.dir_parent}5h{T.R} {T.warn}stale{T.R}")
-        else:
-            bars.append(_format_limit_window_for_prefix(u5, five.get("resets_at", ""), "5h"))
+        bars.append(stale_label("5h") if cache_stale
+                    else _format_limit_window_for_prefix(u5, five.get("resets_at", ""), "5h"))
 
     if "7d" in sections:
-        if stale7:
-            bars.append(f"{T.dir_parent}7d{T.R} {T.warn}stale{T.R}")
-        else:
-            bars.append(_format_limit_window_for_prefix(u7, seven.get("resets_at", ""), "7d"))
+        bars.append(stale_label("7d") if cache_stale
+                    else _format_limit_window_for_prefix(u7, seven.get("resets_at", ""), "7d"))
 
     return bars
 
@@ -1620,13 +1625,13 @@ def provider_limits(input_json: str, cwd: str, show: list[str] | None = None) ->
 
     if "5h" in sections or "7d" in sections:
         data = _cached_json("limits", LIMITS_CACHE_TTL, _refresh_limits_cache_subprocess)
+        _, updated_at, cooldown_until = cache_get("limits")
         has_data = data and "five_hour" in data
         if has_data:
-            bars.extend(_build_limits_bars(data, sections))
+            bars.extend(_build_limits_bars(data, sections, updated_at))
         else:
             # Show retry countdown only for long cooldowns (429 backoff),
             # not for the brief 30s claim-cooldown during normal bg refresh
-            _, _, cooldown_until = cache_get("limits")
             remaining = cooldown_until - time.time() if cooldown_until else 0
             if remaining > ERROR_COOLDOWN_DEFAULT:
                 eta = _format_duration(int(remaining / 60)) if remaining >= 60 else f"{int(remaining)}s"

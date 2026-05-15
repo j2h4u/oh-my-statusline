@@ -2,7 +2,11 @@
 
 Slot-based statusline for Claude Code — limits, git, PR dots, pace indicator.
 
+![Statusline in Claude Code](demo.png)
+
 ## Preview
+
+![Statusline detail](demo1.png)
 
 ```
 my-project/ ⋮ ⑂feat/auth*+ ⋮ 5h ▁ 7d ▃ ctx ▂ ⋮ chill 1%
@@ -29,7 +33,7 @@ During the week you get a **pace label** and a **delta** (how far ahead or behin
 
 Next to the label you get a signed percentage like `+18%` or `-5%` — positive means you're ahead of pace (good), negative means you're burning faster than expected (watch out). After the first half-day, a **surplus** indicator also appears: `+2.3d` means "at this rate, your budget stretches 2.3 extra days beyond the 5-day window." Negative? You're on borrowed time.
 
-Once the 5 work days have elapsed and you're in weekend territory, pace metrics stop making sense — so the statusline switches to **weekend mode**: the text `no pace police` appears in a slowly cycling rainbow gradient. No judgment, just vibes.
+On calendar weekends (Sat/Sun), the pace **label itself** renders in a slowly cycling rainbow — visual signal that it's time to relax, while the delta and surplus numbers remain readable so you still know where you stand.
 
 ## Installation
 
@@ -79,6 +83,8 @@ python3 omcc-statusline.py --theme
 ```
 
 Navigate elements, tweak colors, adjust separators and ramp styles — all with live preview.
+
+![Theme editor](editor.png)
 
 ## Troubleshooting
 
